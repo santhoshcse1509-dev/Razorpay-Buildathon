@@ -1,0 +1,6 @@
+{
+  "name": "Agentic Commerce Assistant",
+  "description": "Full-stack Agentic Commerce Assistant with Node.js/Express backend, Prisma ORM, and React + Tailwind CSS frontend.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

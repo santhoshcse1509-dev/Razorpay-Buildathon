@@ -1,0 +1,177 @@
+// Prisma schema for Agentic Commerce Assistant
+// Supports SQLite for local development and PostgreSQL for production
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  user
+  admin
+}
+
+enum OrderStatus {
+  pending
+  paid
+  failed
+}
+
+enum MessageRole {
+  user
+  agent
+}
+
+enum AgentActionType {
+  recommend
+  add_to_cart
+  compare
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String?
+  name          String
+  googleId      String?        @unique
+  role          Role           @default(user)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  cartItems     CartItem[]
+  cartSessions  CartSession[]
+  orders        Order[]
+  conversations Conversation[]
+  notifications Notification[]
+  productViews  ProductView[]
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  category    String
+  stock       Int         @default(0)
+  imageUrl    String?
+  tags        String      // Stored as JSON string or comma-separated list for cross-db compatibility
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  productViews ProductView[]
+}
+
+model ProductView {
+  id        String   @id @default(cuid())
+  userId    String?
+  productId String
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model CartSession {
+  id          String    @id @default(cuid())
+  userId      String
+  status      String    @default("active") // "active", "abandoned", "converted"
+  itemCount   Int       @default(1)
+  totalAmount Float     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  convertedAt DateTime?
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  quantity  Int      @default(1)
+  addedAt   DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+}
+
+model Order {
+  id                String      @id @default(cuid())
+  userId            String
+  status            OrderStatus @default(pending)
+  totalAmount       Float
+  razorpayOrderId   String?     @unique
+  razorpayPaymentId String?
+  razorpaySignature String?
+  shippingAddress   String?     // JSON string: { name, email, phone, street, city, state, postalCode, country }
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items             OrderItem[]
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  productId       String
+  quantity        Int
+  priceAtPurchase Float
+
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+}
+
+model Conversation {
+  id        String        @id @default(cuid())
+  userId    String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  actions   AgentAction[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           MessageRole  @default(user)
+  content        String
+  toolCalls      String?      // Stored as JSON string for tool invocations/arguments
+  createdAt      DateTime     @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model AgentAction {
+  id             String          @id @default(cuid())
+  conversationId String
+  actionType     AgentActionType
+  payload        String          // Stored as JSON string for action payload
+  createdAt      DateTime        @default(now())
+
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   @default("abandoned_cart_nudge") // abandoned_cart_nudge, order_confirmation, cross_sell
+  title     String
+  message   String
+  metadata  String?  // JSON string containing cart summary, product details, discount, etc.
+  read      Boolean  @default(false)
+  sentAt    DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
