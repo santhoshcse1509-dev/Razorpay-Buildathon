@@ -709,6 +709,23 @@ export async function generateAbandonedCartNudge(userId: string): Promise<{
       }
     }
 
+    // Try Gemini if Anthropic wasn't used or failed
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!nudgeMessage && geminiKey) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        const geminiRes = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: `User ${userName} left these items in their cart: ${itemNames}. Total: $${totalAmount.toFixed(2)}. Write a very short, warm, and compelling 2-sentence abandoned cart reminder message referencing the specific items. Mention a 10% discount code CART10. Return only the plain message text.`,
+        });
+        if (geminiRes.text) {
+          nudgeMessage = geminiRes.text.trim();
+        }
+      } catch (err) {
+        console.warn('Gemini nudge generation error:', err);
+      }
+    }
+
     // 3. Fallback high-converting personalized copy
     if (!nudgeMessage) {
       const primaryItem = cartItems[0].product.name;
@@ -840,8 +857,9 @@ export async function generatePostPurchaseCrossSell(orderId: string): Promise<{
       }
     }
 
-    // Try Claude AI for high-fidelity custom personalization if configured
+    // Try Claude AI or Gemini for high-fidelity custom personalization if configured
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
     const isAnthropicConfigured =
       anthropicKey &&
       anthropicKey.startsWith('sk-ant') &&
@@ -874,6 +892,26 @@ export async function generatePostPurchaseCrossSell(orderId: string): Promise<{
         }
       } catch (err) {
         console.warn('Anthropic post-purchase generation error:', err);
+      }
+    } else if (geminiKey && crossSellCandidate) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        const geminiRes = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: `User ${userName} just purchased: ${purchasedNames}. Recommend cross-sell product: "${crossSellCandidate.name}" (${crossSellCandidate.category}, $${crossSellCandidate.price}). Respond with a JSON object formatted as {"thankYou": "short thank you note", "crossSellReason": "why this complements their purchase"}. Return only JSON.`,
+        });
+        if (geminiRes.text) {
+          try {
+            const rawJson = geminiRes.text.replace(/```json/g, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(rawJson);
+            if (parsed.thankYou) thankYouMessage = parsed.thankYou;
+            if (parsed.crossSellReason) crossSellReason = parsed.crossSellReason;
+          } catch {
+            // ignore parse failure
+          }
+        }
+      } catch (err) {
+        console.warn('Gemini post-purchase generation error:', err);
       }
     }
 

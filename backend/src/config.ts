@@ -16,6 +16,7 @@ export const config = {
   },
   ai: {
     anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
     model: 'claude-sonnet-4-6',
   },
   payments: {
@@ -33,6 +34,7 @@ export function getSecretStatus() {
     databaseUrlConfigured: Boolean(process.env.DATABASE_URL),
     jwtSecretConfigured: Boolean(process.env.JWT_SECRET),
     anthropicApiKeyConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+    geminiApiKeyConfigured: Boolean(process.env.GEMINI_API_KEY),
     razorpayKeyIdConfigured: Boolean(process.env.RAZORPAY_KEY_ID),
     razorpayKeySecretConfigured: Boolean(process.env.RAZORPAY_KEY_SECRET),
     googleClientIdConfigured: Boolean(process.env.GOOGLE_CLIENT_ID),

@@ -116,13 +116,39 @@ export interface OrderItem {
   };
 }
 
+export interface OrderTimelineStep {
+  step: string;
+  status: 'completed' | 'current' | 'upcoming' | 'failed';
+  title: string;
+  description: string;
+  timestamp?: string;
+  location?: string;
+}
+
 export interface Order {
   id: string;
   userId: string;
   status: 'paid' | 'pending' | 'failed';
+  fulfillmentStatus?: 'Processing' | 'Shipped' | 'Delivered' | 'Payment Pending' | 'Payment Failed';
+  trackingNumber?: string;
+  carrier?: string;
+  estimatedDelivery?: string;
+  shippingAddress?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  } | null;
+  timeline?: OrderTimelineStep[];
   totalAmount: number;
   razorpayOrderId?: string;
+  razorpayPaymentId?: string;
   createdAt: string;
+  updatedAt?: string;
   user?: {
     id: string;
     name: string;

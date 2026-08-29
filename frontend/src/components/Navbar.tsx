@@ -12,6 +12,7 @@ import {
   Sparkles,
   CheckCircle2,
   ChevronDown,
+  Truck,
   ShoppingBag,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -19,8 +20,8 @@ import { useAuth } from '../context/AuthContext.js';
 
 interface NavbarProps {
   onOpenAuth: (mode?: 'login' | 'signup') => void;
-  activeView: 'catalog' | 'cart' | 'checkpoint' | 'architecture' | 'admin';
-  setActiveView: (view: 'catalog' | 'cart' | 'checkpoint' | 'architecture' | 'admin') => void;
+  activeView: 'catalog' | 'cart' | 'orders' | 'checkpoint' | 'architecture' | 'admin';
+  setActiveView: (view: 'catalog' | 'cart' | 'orders' | 'checkpoint' | 'architecture' | 'admin') => void;
   cartCount: number;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
@@ -106,22 +107,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Catalog
               </button>
               <button
-                onClick={() => setActiveView('cart')}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
-                  activeView === 'cart'
-                    ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-2xs font-semibold'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                }`}
-              >
-                <ShoppingCart className="w-3.5 h-3.5 text-amber-500" />
-                Cart
-                {cartCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-sky-500 text-white text-[10px] font-bold">
-                    {cartCount}
-                  </span>
-                )}
-              </button>
-              <button
                 onClick={() => setActiveView('admin')}
                 className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
                   activeView === 'admin'
@@ -137,15 +122,36 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
 
-            {/* Cart Button */}
+            {/* Top Action: Orders & Tracking Button */}
             <button
+              id="top-nav-orders-btn"
+              onClick={() => setActiveView('orders')}
+              className={`relative px-2.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
+                activeView === 'orders'
+                  ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30 font-semibold'
+                  : 'bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 border border-transparent'
+              }`}
+              title="Track Orders & Shipment History"
+            >
+              <Truck className="w-4 h-4 text-sky-500" />
+              <span className="hidden sm:inline-block">Orders</span>
+            </button>
+
+            {/* Top Action: Shopping Cart Button */}
+            <button
+              id="top-nav-cart-btn"
               onClick={onOpenCart}
-              className="relative p-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 transition cursor-pointer flex items-center justify-center"
+              className={`relative px-2.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
+                activeView === 'cart'
+                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-semibold'
+                  : 'bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 border border-transparent'
+              }`}
               title="Shopping Cart"
             >
-              <ShoppingCart className="w-4 h-4" />
+              <ShoppingCart className="w-4 h-4 text-amber-500" />
+              <span className="hidden sm:inline-block">Cart</span>
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-sky-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-scale-in">
+                <span className="px-1.5 py-0.2 rounded-full bg-sky-500 text-white text-[10px] font-bold min-w-4 text-center">
                   {cartCount}
                 </span>
               )}
@@ -191,6 +197,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                           Role: {user.role}
                         </span>
                       </div>
+
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setActiveView('orders');
+                        }}
+                        className="w-full text-left px-3 py-2 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition cursor-pointer flex items-center gap-2"
+                      >
+                        <Truck className="w-3.5 h-3.5 text-sky-500" />
+                        My Orders & Tracking
+                      </button>
 
                       <button
                         onClick={() => {
@@ -253,35 +270,27 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Mobile View Switcher */}
-        <div className="grid grid-cols-3 gap-1.5 pb-2 lg:hidden text-xs font-medium">
+        <div className="grid grid-cols-2 gap-1.5 pb-2 lg:hidden text-xs font-medium">
           <button
             onClick={() => setActiveView('catalog')}
-            className={`py-1.5 rounded-lg text-center transition cursor-pointer ${
+            className={`py-1.5 rounded-lg text-center transition cursor-pointer flex items-center justify-center gap-1.5 ${
               activeView === 'catalog'
-                ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 font-semibold'
-                : 'text-neutral-600 dark:text-neutral-400'
+                ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 font-semibold border border-sky-500/20'
+                : 'text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800'
             }`}
           >
+            <ShoppingBag className="w-3.5 h-3.5 text-sky-500" />
             Catalog
           </button>
           <button
-            onClick={() => setActiveView('cart')}
-            className={`py-1.5 rounded-lg text-center transition cursor-pointer ${
-              activeView === 'cart'
-                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold'
-                : 'text-neutral-600 dark:text-neutral-400'
-            }`}
-          >
-            Cart ({cartCount})
-          </button>
-          <button
             onClick={() => setActiveView('admin')}
-            className={`py-1.5 rounded-lg text-center transition cursor-pointer ${
+            className={`py-1.5 rounded-lg text-center transition cursor-pointer flex items-center justify-center gap-1.5 ${
               activeView === 'admin'
-                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 font-semibold'
-                : 'text-neutral-600 dark:text-neutral-400'
+                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 font-semibold border border-purple-500/20'
+                : 'text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800'
             }`}
           >
+            <Shield className="w-3.5 h-3.5 text-purple-600" />
             Admin
           </button>
         </div>

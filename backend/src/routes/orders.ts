@@ -19,9 +19,190 @@ function getRazorpayClient(): Razorpay | null {
   return null;
 }
 
+function formatOrderWithTracking(o: any) {
+  const createdAtTime = new Date(o.createdAt).getTime();
+  const now = Date.now();
+  const elapsedDays = (now - createdAtTime) / (1000 * 60 * 60 * 24);
+
+  let fulfillmentStatus: 'Processing' | 'Shipped' | 'Delivered' | 'Payment Pending' | 'Payment Failed';
+  if (o.status === 'failed') {
+    fulfillmentStatus = 'Payment Failed';
+  } else if (o.status === 'pending') {
+    fulfillmentStatus = 'Payment Pending';
+  } else {
+    // Paid orders progress through fulfillment stages based on age
+    if (elapsedDays < 2) {
+      fulfillmentStatus = 'Processing';
+    } else if (elapsedDays < 6) {
+      fulfillmentStatus = 'Shipped';
+    } else {
+      fulfillmentStatus = 'Delivered';
+    }
+  }
+
+  const cleanId = o.id.replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase();
+  const trackingNumber = `TRK-${cleanId}`;
+  const carrier = 'BlueDart Express / FedEx Priority';
+
+  // Estimated delivery date (3-5 days from creation)
+  const estDeliveryDate = new Date(createdAtTime + 4 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Construct timeline steps
+  const timeline: Array<{
+    step: string;
+    status: 'completed' | 'current' | 'upcoming' | 'failed';
+    title: string;
+    description: string;
+    timestamp?: string;
+    location?: string;
+  }> = [];
+
+  // Step 1: Placed
+  timeline.push({
+    step: 'order_placed',
+    status: 'completed',
+    title: 'Order Placed',
+    description: 'Order details received and registered in fulfillment system.',
+    timestamp: o.createdAt,
+    location: 'Online Storefront',
+  });
+
+  // Step 2: Payment
+  if (o.status === 'failed') {
+    timeline.push({
+      step: 'payment',
+      status: 'failed',
+      title: 'Payment Failed',
+      description: 'Payment authorization declined or cancelled. Retry available.',
+      timestamp: o.updatedAt || o.createdAt,
+    });
+  } else if (o.status === 'pending') {
+    timeline.push({
+      step: 'payment',
+      status: 'current',
+      title: 'Awaiting Payment',
+      description: 'Order created, waiting for payment confirmation from Razorpay.',
+      timestamp: o.createdAt,
+    });
+  } else {
+    timeline.push({
+      step: 'payment',
+      status: 'completed',
+      title: 'Payment Confirmed',
+      description: `Payment verified via Razorpay (${o.razorpayPaymentId || 'Pre-authorized'}).`,
+      timestamp: new Date(createdAtTime + 2 * 60 * 1000).toISOString(),
+    });
+  }
+
+  // Step 3: Processing & Packing
+  if (o.status === 'paid') {
+    if (elapsedDays < 2) {
+      timeline.push({
+        step: 'processing',
+        status: 'current',
+        title: 'Processing & Quality Check',
+        description: 'Items picked, sanitized, and packaged in protective materials.',
+        timestamp: new Date(createdAtTime + 4 * 60 * 60 * 1000).toISOString(),
+        location: 'Central Fulfillment Hub, Mumbai',
+      });
+      timeline.push({
+        step: 'shipped',
+        status: 'upcoming',
+        title: 'Shipment Dispatch',
+        description: 'Package ready for carrier pickup and barcoded tracking assignment.',
+      });
+      timeline.push({
+        step: 'delivered',
+        status: 'upcoming',
+        title: 'Delivery',
+        description: `Estimated arrival on ${new Date(estDeliveryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.`,
+      });
+    } else if (elapsedDays < 6) {
+      timeline.push({
+        step: 'processing',
+        status: 'completed',
+        title: 'Packed & Dispatched',
+        description: 'Order quality checked and handed over to courier.',
+        timestamp: new Date(createdAtTime + 12 * 60 * 60 * 1000).toISOString(),
+        location: 'Central Fulfillment Hub, Mumbai',
+      });
+      timeline.push({
+        step: 'shipped',
+        status: 'current',
+        title: 'In Transit with Carrier',
+        description: `Package on route via ${carrier} (AWB: ${trackingNumber}).`,
+        timestamp: new Date(createdAtTime + 24 * 60 * 60 * 1000).toISOString(),
+        location: 'Regional Sorting Facility',
+      });
+      timeline.push({
+        step: 'delivered',
+        status: 'upcoming',
+        title: 'Out for Delivery',
+        description: `Final mile delivery expected on ${new Date(estDeliveryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.`,
+      });
+    } else {
+      timeline.push({
+        step: 'processing',
+        status: 'completed',
+        title: 'Packed & Dispatched',
+        description: 'Order verified and securely packaged.',
+        timestamp: new Date(createdAtTime + 12 * 60 * 60 * 1000).toISOString(),
+        location: 'Central Fulfillment Hub, Mumbai',
+      });
+      timeline.push({
+        step: 'shipped',
+        status: 'completed',
+        title: 'In Transit & Arrived at Destination Hub',
+        description: `Package cleared transit checkpoint (AWB: ${trackingNumber}).`,
+        timestamp: new Date(createdAtTime + 2 * 24 * 60 * 60 * 1000).toISOString(),
+        location: 'Local Delivery Center',
+      });
+      timeline.push({
+        step: 'delivered',
+        status: 'completed',
+        title: 'Delivered',
+        description: 'Package delivered to recipient address. Signed & verified.',
+        timestamp: new Date(createdAtTime + 4 * 24 * 60 * 60 * 1000).toISOString(),
+        location: 'Customer Address',
+      });
+    }
+  }
+
+  return {
+    ...o,
+    fulfillmentStatus,
+    trackingNumber,
+    carrier,
+    estimatedDelivery: estDeliveryDate,
+    timeline,
+    shippingAddress: (() => {
+      try {
+        return o.shippingAddress ? JSON.parse(o.shippingAddress) : null;
+      } catch {
+        return null;
+      }
+    })(),
+    items: o.items.map((i: any) => ({
+      ...i,
+      product: i.product
+        ? {
+            ...i.product,
+            tags: (() => {
+              try {
+                return JSON.parse(i.product.tags);
+              } catch {
+                return typeof i.product.tags === 'string' ? i.product.tags.split(',') : [];
+              }
+            })(),
+          }
+        : undefined,
+    })),
+  };
+}
+
 /**
  * GET /api/orders
- * Returns list of orders with items, status summary, and customer details
+ * Returns list of orders with items, status summary, tracking and customer details
  */
 ordersRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -48,29 +229,16 @@ ordersRouter.get('/', async (req: Request, res: Response): Promise<void> => {
       orderBy: { createdAt: 'desc' },
     });
 
+    const parsedOrders = orders.map(formatOrderWithTracking);
+
     const statusCounts = {
       paid: orders.filter((o) => o.status === 'paid').length,
       pending: orders.filter((o) => o.status === 'pending').length,
       failed: orders.filter((o) => o.status === 'failed').length,
+      processing: parsedOrders.filter((o) => o.fulfillmentStatus === 'Processing').length,
+      shipped: parsedOrders.filter((o) => o.fulfillmentStatus === 'Shipped').length,
+      delivered: parsedOrders.filter((o) => o.fulfillmentStatus === 'Delivered').length,
     };
-
-    const parsedOrders = orders.map((o) => ({
-      ...o,
-      shippingAddress: o.shippingAddress ? JSON.parse(o.shippingAddress) : null,
-      items: o.items.map((i) => ({
-        ...i,
-        product: {
-          ...i.product,
-          tags: (() => {
-            try {
-              return JSON.parse(i.product.tags);
-            } catch {
-              return i.product.tags.split(',');
-            }
-          })(),
-        },
-      })),
-    }));
 
     res.json({
       success: true,
@@ -84,8 +252,58 @@ ordersRouter.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * GET /api/orders/track/:query
+ * Lookup order by Order ID, Razorpay Order ID, or Tracking Number
+ */
+ordersRouter.get('/track/:query', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { query } = req.params;
+    const cleanQuery = query.trim();
+
+    // Look for match in id, razorpayOrderId, or id matching the TRK suffix
+    const allOrders = await prisma.order.findMany({
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const matched = allOrders.find((o) => {
+      if (o.id.toLowerCase() === cleanQuery.toLowerCase()) return true;
+      if (o.razorpayOrderId && o.razorpayOrderId.toLowerCase() === cleanQuery.toLowerCase()) return true;
+      const trkNum = `TRK-${o.id.replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase()}`;
+      if (trkNum.toLowerCase() === cleanQuery.toLowerCase()) return true;
+      if (o.id.endsWith(cleanQuery) || cleanQuery.endsWith(o.id.slice(-6))) return true;
+      return false;
+    });
+
+    if (!matched) {
+      res.status(404).json({
+        success: false,
+        error: `No order found matching "${cleanQuery}". Please check your order ID or tracking number.`,
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      order: formatOrderWithTracking(matched),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * GET /api/orders/:id
- * Get single order details
+ * Get single order details with tracking
  */
 ordersRouter.get('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -112,23 +330,7 @@ ordersRouter.get('/:id', async (req: Request, res: Response): Promise<void> => {
 
     res.json({
       success: true,
-      order: {
-        ...order,
-        shippingAddress: order.shippingAddress ? JSON.parse(order.shippingAddress) : null,
-        items: order.items.map((i) => ({
-          ...i,
-          product: {
-            ...i.product,
-            tags: (() => {
-              try {
-                return JSON.parse(i.product.tags);
-              } catch {
-                return i.product.tags.split(',');
-              }
-            })(),
-          },
-        })),
-      },
+      order: formatOrderWithTracking(order),
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

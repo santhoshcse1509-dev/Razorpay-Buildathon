@@ -194,18 +194,46 @@ export async function fetchUsers(): Promise<{ data: User[]; count: number }> {
   return res.json();
 }
 
-export async function fetchOrders(): Promise<{
+export async function fetchOrders(userId?: string): Promise<{
   data: Order[];
   count: number;
-  statusCounts: { paid: number; pending: number; failed: number };
+  statusCounts: {
+    paid: number;
+    pending: number;
+    failed: number;
+    processing?: number;
+    shipped?: number;
+    delivered?: number;
+  };
 }> {
-  const res = await fetch(`${API_BASE}/orders`, {
+  const url = userId ? `${API_BASE}/orders?userId=${encodeURIComponent(userId)}` : `${API_BASE}/orders`;
+  const res = await fetch(url, {
     headers: { ...getAuthHeader() },
   });
   if (!res.ok) {
     throw new Error(`Failed to fetch orders: ${res.status}`);
   }
   return res.json();
+}
+
+export async function fetchOrderById(orderId: string): Promise<{ success: boolean; order: Order }> {
+  const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}`, {
+    headers: { ...getAuthHeader() },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to fetch order details');
+  }
+  return data;
+}
+
+export async function apiTrackOrder(query: string): Promise<{ success: boolean; order: Order }> {
+  const res = await fetch(`${API_BASE}/orders/track/${encodeURIComponent(query.trim())}`);
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || `Order not found for "${query}"`);
+  }
+  return data;
 }
 
 export async function fetchConversations(): Promise<{ data: Conversation[]; count: number }> {
@@ -468,16 +496,6 @@ export async function apiRetryOrderPayment(orderId: string): Promise<any> {
     throw new Error(data.error || 'Failed to retry order');
   }
   return data;
-}
-
-export async function fetchOrderById(id: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/orders/${id}`, {
-    headers: { ...getAuthHeader() },
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch order: ${res.status}`);
-  }
-  return res.json();
 }
 
 // ---------------------------------------------------------------------------

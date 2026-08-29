@@ -28,6 +28,7 @@ import { SeedDataExplorer } from './components/SeedDataExplorer.js';
 import { ApiTester } from './components/ApiTester.js';
 import { ChatWidget } from './components/ChatWidget.js';
 import { AdminAnalyticsDashboard } from './components/AdminAnalyticsDashboard.js';
+import { OrderTrackingView } from './components/OrderTrackingView.js';
 import {
   fetchHealth,
   fetchProducts,
@@ -53,8 +54,8 @@ import {
 function MainApp() {
   const { user, isAuthenticated } = useAuth();
 
-  // Navigation & View Mode: 'catalog' | 'cart' | 'checkpoint' | 'architecture' | 'admin'
-  const [activeView, setActiveView] = useState<'catalog' | 'cart' | 'checkpoint' | 'architecture' | 'admin'>('catalog');
+  // Navigation & View Mode: 'catalog' | 'cart' | 'orders' | 'checkpoint' | 'architecture' | 'admin'
+  const [activeView, setActiveView] = useState<'catalog' | 'cart' | 'orders' | 'checkpoint' | 'architecture' | 'admin'>('catalog');
 
   // Search state across navbar and catalog
   const [searchQuery, setSearchQuery] = useState('');
@@ -384,6 +385,23 @@ function MainApp() {
           </div>
         )}
 
+        {/* Active View: Order Tracking & Shipment Status View */}
+        {activeView === 'orders' && (
+          <OrderTrackingView
+            onNavigateToCatalog={() => setActiveView('catalog')}
+            onOpenProductDetail={(pid) => setSelectedProductId(pid)}
+            onAddToCart={(prod, qty) => {
+              handleAddToCart(prod, qty);
+              setCartDrawerOpen(true);
+            }}
+            onAskAiWithQuery={(q) => {
+              setChatInitialQuery(q);
+              setChatWidgetOpen(true);
+            }}
+            onOpenAuth={handleOpenAuth}
+          />
+        )}
+
         {/* Active View: Admin Analytics & Telemetry Dashboard (Phase 4) */}
         {activeView === 'admin' && (
           <AdminAnalyticsDashboard
@@ -459,7 +477,7 @@ function MainApp() {
           setCartDrawerOpen(true);
         }}
         onOpenProductDetail={(pid) => setSelectedProductId(pid)}
-        onViewOrders={() => setActiveView('architecture')}
+        onViewOrders={() => setActiveView('orders')}
       />
 
       {/* 9. AI Shopping Agent Floating Chat Widget */}
