@@ -12,6 +12,10 @@ import {
   ShoppingBag,
   Tag,
   Lock,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { CartItemEntry } from './CartDrawer.js';
@@ -21,6 +25,7 @@ import {
   apiRetryOrderPayment,
 } from '../api.js';
 import { ShippingAddress, CheckoutResult } from '../types.js';
+import { loadRazorpayScript } from '../utils/razorpay.js';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -64,6 +69,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [checkoutData, setCheckoutData] = useState<CheckoutResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOpeningRazorpay, setIsOpeningRazorpay] = useState(false);
+  const [showTestCards, setShowTestCards] = useState(false);
 
   useEffect(() => {
     if (initialDiscountCode) {
@@ -100,6 +107,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         userId: user?.id || 'usr_cust_01',
         shippingAddress,
         discountCode: discountApplied ? discountCode : undefined,
+        items: items.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
       });
 
       setCheckoutData(result as any);
@@ -108,6 +116,88 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setErrorMessage(err.message || 'Failed to create order. Please try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Official Razorpay Checkout Modal (Opens real Razorpay Standard Checkout)
+  const handleOpenRazorpayCheckout = async () => {
+    if (!checkoutData || !checkoutData.razorpay) return;
+    setIsOpeningRazorpay(true);
+    setErrorMessage(null);
+
+    try {
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded || typeof (window as any).Razorpay === 'undefined') {
+        throw new Error('Razorpay SDK could not be loaded from CDN. Please check network connection or use the test actions below.');
+      }
+
+      const rzpOptions = {
+        key: checkoutData.razorpay.key,
+        amount: checkoutData.razorpay.amount,
+        currency: checkoutData.razorpay.currency || 'INR',
+        name: checkoutData.razorpay.name || 'Agentic Commerce Store',
+        description: checkoutData.razorpay.description || `Order #${checkoutData.order.id.slice(-6)}`,
+        order_id: checkoutData.razorpay.orderId,
+        prefill: {
+          name: shippingAddress.name || checkoutData.razorpay.prefill?.name || user?.name || 'Customer',
+          email: shippingAddress.email || checkoutData.razorpay.prefill?.email || user?.email || 'customer@example.com',
+          contact: shippingAddress.phone || checkoutData.razorpay.prefill?.contact || '+919876543210',
+        },
+        notes: {
+          orderId: checkoutData.order.id,
+          address: `${shippingAddress.street}, ${shippingAddress.city}`,
+        },
+        theme: {
+          color: '#0284c7', // Sky-600
+        },
+        modal: {
+          ondismiss: () => {
+            setIsOpeningRazorpay(false);
+          },
+          escape: true,
+          backdropclose: false,
+        },
+        handler: async (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) => {
+          setStep('processing');
+          setIsOpeningRazorpay(false);
+          try {
+            const verifyResult = await apiVerifyOrderPayment(checkoutData.order.id, {
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpaySignature: response.razorpay_signature,
+              simulateFailure: false,
+            });
+
+            if (verifyResult.success && verifyResult.status === 'paid') {
+              onCartCleared();
+              onPaymentSuccess(verifyResult.order);
+              onClose();
+            } else {
+              setErrorMessage(verifyResult.error || 'Payment verification failed on server.');
+              setStep('failed');
+            }
+          } catch (verifyErr: any) {
+            setErrorMessage(verifyErr.message || 'Payment verification failed.');
+            setStep('failed');
+          }
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(rzpOptions);
+      rzp.on('payment.failed', (resp: any) => {
+        setIsOpeningRazorpay(false);
+        const reason = resp.error?.description || resp.error?.reason || 'Payment failed or declined by issuing bank.';
+        handleSimulateFailure(reason);
+      });
+
+      rzp.open();
+    } catch (err: any) {
+      setIsOpeningRazorpay(false);
+      setErrorMessage(err.message || 'Could not launch Razorpay Gateway.');
     }
   };
 
@@ -415,7 +505,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-neutral-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                  2. Razorpay Payment Gateway (Test Mode)
+                  2. Razorpay Payment Gateway
                 </h3>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-300">
                   Order #{checkoutData.order.id.slice(-6)}
@@ -444,6 +534,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 <div className="text-xs text-neutral-600 dark:text-neutral-400 space-y-1">
                   <div className="flex justify-between">
+                    <span>Razorpay Key:</span>
+                    <span className="font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                      {checkoutData.razorpay.key ? `${checkoutData.razorpay.key.slice(0, 12)}... (Connected)` : 'Default Test Key'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
                     <span>Customer:</span>
                     <span className="font-medium text-neutral-900 dark:text-white">
                       {shippingAddress.name} ({shippingAddress.email})
@@ -458,53 +555,123 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               </div>
 
-              {/* Interactive Gateway Actions */}
-              <div className="space-y-3 pt-2">
-                <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-                  Select payment test action to verify the transaction paths:
-                </p>
+              {/* Error Notification if any */}
+              {errorMessage && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
 
-                {/* Option A: Successful Payment */}
+              {/* Primary Action: Official Razorpay Checkout Modal */}
+              <div className="space-y-3 pt-1">
                 <button
-                  onClick={handleSimulateSuccess}
-                  className="w-full p-3.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-between shadow-xs"
+                  type="button"
+                  onClick={handleOpenRazorpayCheckout}
+                  disabled={isOpeningRazorpay}
+                  className="w-full p-4 bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-between shadow-md group"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                      <CreditCard className="w-4 h-4 text-white" />
+                    </div>
                     <div className="text-left">
-                      <div className="font-bold">Simulate Successful Payment</div>
-                      <div className="text-[10px] text-emerald-100 font-normal">
-                        Test card 4111 • OTP Verified • Marks Order "paid", decrements stock, clears cart
+                      <div className="text-sm font-bold flex items-center gap-1.5">
+                        Pay ₹{checkoutData.razorpay.amountInr?.toLocaleString('en-IN') || totalInr.toLocaleString('en-IN')} with Razorpay
+                        <ExternalLink className="w-3.5 h-3.5 opacity-80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                      </div>
+                      <div className="text-[11px] text-sky-100 font-normal">
+                        Launch Official Razorpay Modal (UPI, Cards, Netbanking)
                       </div>
                     </div>
                   </div>
-                  <ArrowRight className="w-4 h-4 shrink-0" />
+                  {isOpeningRazorpay ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <ArrowRight className="w-4 h-4 shrink-0 group-hover:translate-x-1 transition-transform" />
+                  )}
                 </button>
 
-                {/* Option B: Failed Payment */}
-                <button
-                  onClick={() =>
-                    handleSimulateFailure(
-                      'Payment failed: Bank declined authorization (Insufficient funds or 3D Secure failure).'
-                    )
-                  }
-                  className="w-full p-3.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <div className="text-left">
-                      <div className="font-bold">Simulate Payment Failure</div>
-                      <div className="text-[10px] text-rose-500 font-normal">
-                        Tests error handling: Marks Order "failed", keeps cart intact for retry
+                {/* Collapsible Test Card Credentials Helper */}
+                <div className="border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden bg-neutral-50/50 dark:bg-neutral-900/30">
+                  <button
+                    type="button"
+                    onClick={() => setShowTestCards(!showTestCards)}
+                    className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs text-neutral-700 dark:text-neutral-300 font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800/50 transition cursor-pointer"
+                  >
+                    <span className="flex items-center gap-1.5 text-[11px] font-semibold">
+                      <Info className="w-3.5 h-3.5 text-sky-500" />
+                      Razorpay Test Mode Credentials Guide
+                    </span>
+                    {showTestCards ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+
+                  {showTestCards && (
+                    <div className="px-3.5 pb-3 pt-1 text-[11px] border-t border-neutral-200 dark:border-neutral-800 space-y-2 text-neutral-600 dark:text-neutral-400">
+                      <div className="grid grid-cols-2 gap-2 bg-white dark:bg-neutral-900 p-2.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
+                        <div>
+                          <span className="text-[10px] text-neutral-400 block uppercase">Test Card Number</span>
+                          <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">4111 1111 1111 1111</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-neutral-400 block uppercase">Expiry / CVV</span>
+                          <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">12/28 • 123</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-neutral-400 block uppercase">OTP (3D Secure)</span>
+                          <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">Any (e.g. 123456)</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-neutral-400 block uppercase">Test UPI ID</span>
+                          <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">success@razorpay</span>
+                        </div>
                       </div>
+                      <p className="text-[10px] text-neutral-500">
+                        When the Razorpay modal opens, enter the test details above or click "Success" in Razorpay's sandbox emulator.
+                      </p>
                     </div>
+                  )}
+                </div>
+
+                {/* Direct Simulation Options */}
+                <div className="pt-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-px bg-neutral-200 dark:border-neutral-800 flex-1"></div>
+                    <span className="text-[10px] uppercase font-bold text-neutral-400">or 1-click sandbox actions</span>
+                    <div className="h-px bg-neutral-200 dark:border-neutral-800 flex-1"></div>
                   </div>
-                  <ArrowRight className="w-4 h-4 shrink-0" />
-                </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Option A: Fast Simulate Success */}
+                    <button
+                      type="button"
+                      onClick={handleSimulateSuccess}
+                      className="p-2.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
+                      <span>Simulate Success</span>
+                    </button>
+
+                    {/* Option B: Fast Simulate Failure */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleSimulateFailure(
+                          'Payment failed: Bank declined authorization (Insufficient funds or 3D Secure failure).'
+                        )
+                      }
+                      className="p-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                      <span>Simulate Decline</span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center justify-between pt-2 text-[11px] text-neutral-400">
                 <button
+                  type="button"
                   onClick={() => setStep('address')}
                   className="text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 underline cursor-pointer"
                 >
@@ -562,6 +729,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
               <div className="flex gap-2 pt-2">
                 <button
+                  type="button"
                   onClick={handleRetryOrder}
                   disabled={isSubmitting}
                   className="flex-1 py-2.5 px-4 bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
@@ -570,6 +738,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <span>Retry Payment</span>
                 </button>
                 <button
+                  type="button"
                   onClick={onClose}
                   className="px-4 py-2.5 bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-xl text-xs font-semibold cursor-pointer"
                 >

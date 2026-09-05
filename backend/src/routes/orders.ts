@@ -8,8 +8,8 @@ export const ordersRouter = Router();
 // Lazy initialization of Razorpay instance
 let razorpayClient: Razorpay | null = null;
 function getRazorpayClient(): Razorpay | null {
-  const key_id = process.env.RAZORPAY_KEY_ID;
-  const key_secret = process.env.RAZORPAY_KEY_SECRET;
+  const key_id = (process.env.RAZORPAY_KEY_ID || '').trim();
+  const key_secret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
   if (key_id && key_secret && !key_id.includes('xxxx') && !key_secret.includes('xxxx')) {
     if (!razorpayClient) {
       razorpayClient = new Razorpay({ key_id, key_secret });
@@ -650,7 +650,32 @@ ordersRouter.post('/:id/retry', async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const newRazorpayOrderId = `order_retry_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    const inrRate = 83;
+    const finalTotalInr = Math.round(order.totalAmount * inrRate);
+    const amountInPaise = finalTotalInr * 100;
+
+    const rzp = getRazorpayClient();
+    let newRazorpayOrderId = '';
+    if (rzp) {
+      try {
+        const rzpOrder = await rzp.orders.create({
+          amount: amountInPaise,
+          currency: 'INR',
+          receipt: `rcpt_ret_${Date.now().toString().slice(-8)}`,
+          notes: {
+            orderId: order.id,
+            retry: 'true',
+          },
+        });
+        newRazorpayOrderId = rzpOrder.id;
+      } catch (e) {
+        console.warn('Razorpay retry order create error:', e);
+      }
+    }
+
+    if (!newRazorpayOrderId) {
+      newRazorpayOrderId = `order_retry_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    }
 
     const updated = await prisma.order.update({
       where: { id },
@@ -664,9 +689,7 @@ ordersRouter.post('/:id/retry', async (req: Request, res: Response): Promise<voi
       },
     });
 
-    const inrRate = 83;
-    const finalTotalInr = Math.round(order.totalAmount * inrRate);
-    const amountInPaise = finalTotalInr * 100;
+    const razorpayKey = (process.env.RAZORPAY_KEY_ID || '').trim() || 'rzp_test_AiCommerceDemo123';
 
     res.json({
       success: true,
@@ -677,7 +700,7 @@ ordersRouter.post('/:id/retry', async (req: Request, res: Response): Promise<voi
       },
       razorpay: {
         orderId: newRazorpayOrderId,
-        key: process.env.RAZORPAY_KEY_ID || 'rzp_test_AiCommerceDemo123',
+        key: razorpayKey,
         amount: amountInPaise,
         amountInr: finalTotalInr,
         amountUsd: order.totalAmount,
