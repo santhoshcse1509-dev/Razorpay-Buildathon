@@ -17,6 +17,8 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
+import { Product } from '../types.js';
+import { PredictiveSearchBar } from './PredictiveSearchBar.js';
 
 interface NavbarProps {
   onOpenAuth: (mode?: 'login' | 'signup') => void;
@@ -26,6 +28,7 @@ interface NavbarProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   onOpenCart?: () => void;
+  onSelectProduct?: (product: Product) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -36,6 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   searchQuery,
   setSearchQuery,
   onOpenCart,
+  onSelectProduct,
 }) => {
   const { user, isAuthenticated, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -69,26 +73,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </div>
 
-          {/* Search Bar */}
+          {/* Desktop Search Bar with Predictive Dropdown */}
           <div className="flex-1 max-w-md hidden md:block">
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-400" />
-              <input
-                type="text"
-                placeholder="Search products by name, tag, or description..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-hidden focus:ring-2 focus:ring-sky-500 transition"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-2 text-[10px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 bg-neutral-200 dark:bg-neutral-700 rounded px-1.5 py-0.5 cursor-pointer"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
+            <PredictiveSearchBar
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onSelectProduct={onSelectProduct}
+              onNavigateToCatalog={() => setActiveView('catalog')}
+            />
           </div>
 
           {/* Navigation Views & Actions */}
@@ -255,18 +247,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Mobile Search Bar */}
+        {/* Mobile Search Bar with Predictive Dropdown */}
         <div className="pb-3 md:hidden">
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-400" />
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 text-xs bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-neutral-100 placeholder-neutral-400"
-            />
-          </div>
+          <PredictiveSearchBar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            onSelectProduct={onSelectProduct}
+            onNavigateToCatalog={() => setActiveView('catalog')}
+            placeholder="Search products..."
+            compact
+          />
         </div>
 
         {/* Mobile View Switcher */}

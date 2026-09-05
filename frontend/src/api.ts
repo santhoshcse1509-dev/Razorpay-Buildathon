@@ -11,6 +11,8 @@ import {
   SingleProductResponse,
   AdminAnalyticsResponse,
   AdminConversationsResponse,
+  ProductReview,
+  ProductReviewsResponse,
 } from './types.js';
 
 const API_BASE = '/api';
@@ -162,6 +164,54 @@ export async function fetchCategories(): Promise<{ categories: CategoryInfo[]; t
     throw new Error(`Failed to fetch categories: ${res.status}`);
   }
   return res.json();
+}
+
+export async function fetchProductReviews(productId: string): Promise<ProductReviewsResponse> {
+  const res = await fetch(`${API_BASE}/products/${productId}/reviews`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to fetch reviews' }));
+    throw new Error(err.error || `Failed to fetch reviews (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function submitProductReview(
+  productId: string,
+  review: { author: string; rating: number; title: string; comment: string }
+): Promise<{
+  success: boolean;
+  review: ProductReview;
+  averageRating: number;
+  totalReviews: number;
+  ratingBreakdown: { 5: number; 4: number; 3: number; 2: number; 1: number };
+}> {
+  const res = await fetch(`${API_BASE}/products/${productId}/reviews`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+    body: JSON.stringify(review),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to submit review');
+  }
+  return data;
+}
+
+export async function voteHelpfulReview(
+  productId: string,
+  reviewId: string
+): Promise<{ success: boolean; helpfulCount: number }> {
+  const res = await fetch(`${API_BASE}/products/${productId}/reviews/${reviewId}/helpful`, {
+    method: 'POST',
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to mark review helpful');
+  }
+  return data;
 }
 
 // ---------------------------------------------------------------------------

@@ -311,6 +311,10 @@ function MainApp() {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onOpenCart={() => setCartDrawerOpen(true)}
+        onSelectProduct={(p) => {
+          setSelectedProductId(p.id);
+          setActiveView('catalog');
+        }}
       />
 
       {/* 2. Main Workspace Layout */}

@@ -88,6 +88,34 @@ export interface SingleProductResponse {
   relatedProducts: Product[];
 }
 
+export interface ProductReview {
+  id: string;
+  productId: string;
+  author: string;
+  avatarColor?: string;
+  rating: number;
+  title: string;
+  comment: string;
+  verifiedPurchase: boolean;
+  helpfulCount: number;
+  createdAt: string;
+}
+
+export interface ProductReviewsResponse {
+  success: boolean;
+  productId: string;
+  averageRating: number;
+  totalReviews: number;
+  ratingBreakdown: {
+    5: number;
+    4: number;
+    3: number;
+    2: number;
+    1: number;
+  };
+  reviews: ProductReview[];
+}
+
 export interface User {
   id: string;
   name: string;

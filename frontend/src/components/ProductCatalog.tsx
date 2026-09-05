@@ -16,6 +16,7 @@ import {
 import { Product, CategoryInfo, ProductFilters } from '../types.js';
 import { fetchProducts, fetchCategories } from '../api.js';
 import { ProductCard } from './ProductCard.js';
+import { ProductCardSkeleton } from './ProductCardSkeleton.js';
 
 interface ProductCatalogProps {
   onSelectProduct: (product: Product) => void;
@@ -32,6 +33,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
 }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,11 +49,14 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   // Load categories on mount
   useEffect(() => {
     const loadCategories = async () => {
+      setCategoriesLoading(true);
       try {
         const res = await fetchCategories();
         setCategories(res.categories || []);
       } catch {
         // Handled silently for production
+      } finally {
+        setCategoriesLoading(false);
       }
     };
     loadCategories();
@@ -136,19 +141,28 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
             >
               All Items
             </button>
-            {categories.map((cat) => (
-              <button
-                key={cat.name}
-                onClick={() => setSelectedCategory(cat.name)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-                  selectedCategory === cat.name
-                    ? 'bg-sky-500 text-white font-bold shadow-xs'
-                    : 'bg-white/10 hover:bg-white/20 text-neutral-200'
-                }`}
-              >
-                {cat.name} ({cat.count})
-              </button>
-            ))}
+            {categoriesLoading ? (
+              <>
+                <div className="h-7 w-28 rounded-xl bg-white/10 animate-pulse" />
+                <div className="h-7 w-24 rounded-xl bg-white/10 animate-pulse" />
+                <div className="h-7 w-32 rounded-xl bg-white/10 animate-pulse" />
+                <div className="h-7 w-28 rounded-xl bg-white/10 animate-pulse" />
+              </>
+            ) : (
+              categories.map((cat) => (
+                <button
+                  key={cat.name}
+                  onClick={() => setSelectedCategory(cat.name)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    selectedCategory === cat.name
+                      ? 'bg-sky-500 text-white font-bold shadow-xs'
+                      : 'bg-white/10 hover:bg-white/20 text-neutral-200'
+                  }`}
+                >
+                  {cat.name} ({cat.count})
+                </button>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -193,20 +207,31 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                 </span>
               </button>
 
-              {categories.map((cat) => (
-                <button
-                  key={cat.name}
-                  onClick={() => setSelectedCategory(cat.name)}
-                  className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer flex items-center justify-between ${
-                    selectedCategory === cat.name
-                      ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 font-bold border border-sky-200 dark:border-sky-800'
-                      : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                  }`}
-                >
-                  <span>{cat.name}</span>
-                  <span className="text-[10px] opacity-70 font-mono">{cat.count}</span>
-                </button>
-              ))}
+              {categoriesLoading ? (
+                <div className="space-y-1.5 pt-1">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div
+                      key={i}
+                      className="h-8 rounded-xl bg-neutral-100 dark:bg-neutral-800/60 skeleton-shimmer"
+                    />
+                  ))}
+                </div>
+              ) : (
+                categories.map((cat) => (
+                  <button
+                    key={cat.name}
+                    onClick={() => setSelectedCategory(cat.name)}
+                    className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer flex items-center justify-between ${
+                      selectedCategory === cat.name
+                        ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 font-bold border border-sky-200 dark:border-sky-800'
+                        : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                    }`}
+                  >
+                    <span>{cat.name}</span>
+                    <span className="text-[10px] opacity-70 font-mono">{cat.count}</span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
@@ -272,21 +297,30 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                 Filters
               </button>
 
-              <div className="text-xs text-neutral-600 dark:text-neutral-400">
-                Showing{' '}
-                <span className="font-bold text-neutral-900 dark:text-neutral-100">
-                  {products.length}
-                </span>{' '}
-                of {totalCount} products
-                {selectedCategory !== 'All' && (
-                  <span className="ml-1 text-sky-600 dark:text-sky-400 font-medium">
-                    in {selectedCategory}
+              <div className="text-xs text-neutral-600 dark:text-neutral-400 min-h-[20px] flex items-center">
+                {loading ? (
+                  <span className="flex items-center gap-1.5 text-neutral-400">
+                    <span className="inline-block w-20 h-3.5 bg-neutral-200 dark:bg-neutral-800 rounded skeleton-shimmer align-middle" />
+                    <span>products...</span>
                   </span>
-                )}
-                {searchQuery && (
-                  <span className="ml-1 text-neutral-400">
-                    matching &ldquo;{searchQuery}&rdquo;
-                  </span>
+                ) : (
+                  <>
+                    Showing{' '}
+                    <span className="font-bold text-neutral-900 dark:text-neutral-100">
+                      {products.length}
+                    </span>{' '}
+                    of {totalCount} products
+                    {selectedCategory !== 'All' && (
+                      <span className="ml-1 text-sky-600 dark:text-sky-400 font-medium">
+                        in {selectedCategory}
+                      </span>
+                    )}
+                    {searchQuery && (
+                      <span className="ml-1 text-neutral-400">
+                        matching &ldquo;{searchQuery}&rdquo;
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -343,19 +377,27 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                   >
                     All
                   </button>
-                  {categories.map((c) => (
-                    <button
-                      key={c.name}
-                      onClick={() => setSelectedCategory(c.name)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer ${
-                        selectedCategory === c.name
-                          ? 'bg-sky-600 text-white'
-                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-                      }`}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
+                  {categoriesLoading ? (
+                    <>
+                      <div className="h-6 w-16 rounded-lg bg-neutral-200 dark:bg-neutral-800 skeleton-shimmer" />
+                      <div className="h-6 w-20 rounded-lg bg-neutral-200 dark:bg-neutral-800 skeleton-shimmer" />
+                      <div className="h-6 w-18 rounded-lg bg-neutral-200 dark:bg-neutral-800 skeleton-shimmer" />
+                    </>
+                  ) : (
+                    categories.map((c) => (
+                      <button
+                        key={c.name}
+                        onClick={() => setSelectedCategory(c.name)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer ${
+                          selectedCategory === c.name
+                            ? 'bg-sky-600 text-white'
+                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                        }`}
+                      >
+                        {c.name}
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -393,20 +435,8 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
           {/* Product Grid Content */}
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-              {[1, 2, 3, 4, 5, 6].map((idx) => (
-                <div
-                  key={idx}
-                  className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-4 space-y-3 animate-pulse"
-                >
-                  <div className="aspect-4/3 bg-neutral-200 dark:bg-neutral-800 rounded-xl" />
-                  <div className="h-4 bg-neutral-200 dark:bg-neutral-800 rounded w-3/4" />
-                  <div className="h-3 bg-neutral-200 dark:bg-neutral-800 rounded w-full" />
-                  <div className="h-3 bg-neutral-200 dark:bg-neutral-800 rounded w-2/3" />
-                  <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex justify-between items-center">
-                    <div className="h-5 bg-neutral-200 dark:bg-neutral-800 rounded w-16" />
-                    <div className="h-7 bg-neutral-200 dark:bg-neutral-800 rounded w-20" />
-                  </div>
-                </div>
+              {[0, 1, 2, 3, 4, 5].map((idx) => (
+                <ProductCardSkeleton key={idx} index={idx} />
               ))}
             </div>
           ) : error ? (
